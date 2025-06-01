@@ -52,9 +52,14 @@ func main() {
 		log.Fatalf("Failed to subscribe to pause queue: %v", err)
 	}
 
-	err = pubsub.SubscribeJSON(connection, routing.ExchangePerilTopic, "army_moves."+username, "army_moves.*", pubsub.SimpleQueueTransient, handlerMove(gs))
+	err = pubsub.SubscribeJSON(connection, routing.ExchangePerilTopic, "army_moves."+username, "army_moves.*", pubsub.SimpleQueueTransient, handlerMove(gs, publishCh))
 	if err != nil {
 		log.Fatalf("Failed to subscribe to move queue: %v", err)
+	}
+
+	err = pubsub.SubscribeJSON(connection, routing.ExchangePerilTopic, routing.WarRecognitionsPrefix, routing.WarRecognitionsPrefix+".*", pubsub.SimpleQueueDurable, handlerWar(gs))
+	if err != nil {
+		log.Fatalf("could not subscribe to war declarations: %v", err)
 	}
 
 	for {
@@ -102,7 +107,7 @@ func handlerPause(gs *gamelogic.GameState) func(routing.PlayingState) pubsub.Ack
 	}
 }
 
-func handlerMove(gs *gamelogic.GameState) func(gamelogic.ArmyMove) pubsub.Acktype {
+func handlerMove(gs *gamelogic.GameState, ch *amqp.Channel) func(gamelogic.ArmyMove) pubsub.Acktype {
 	return func(move gamelogic.ArmyMove) pubsub.Acktype {
 		defer fmt.Print("> ")
 		moveOutcome := gs.HandleMove(move)
@@ -112,9 +117,41 @@ func handlerMove(gs *gamelogic.GameState) func(gamelogic.ArmyMove) pubsub.Acktyp
 		case gamelogic.MoveOutComeSafe:
 			return pubsub.Ack
 		case gamelogic.MoveOutcomeMakeWar:
+			err := pubsub.PublishJSON(ch, routing.ExchangePerilTopic, routing.WarRecognitionsPrefix+"."+gs.GetUsername(), gamelogic.RecognitionOfWar{
+				Attacker: move.Player,
+				Defender: gs.GetPlayerSnap(),
+			},
+			)
+			if err != nil {
+				fmt.Printf("Error: %s\n", err)
+				return pubsub.NackRequeue
+			}
 			return pubsub.Ack
 		}
+
 		fmt.Println("error: unknown move outcome")
+		return pubsub.NackDiscard
+	}
+}
+
+func handlerWar(gs *gamelogic.GameState) func(dw gamelogic.RecognitionOfWar) pubsub.Acktype {
+	return func(dw gamelogic.RecognitionOfWar) pubsub.Acktype {
+		defer fmt.Print("> ")
+		warOutcome, _, _ := gs.HandleWar(dw)
+		switch warOutcome {
+		case gamelogic.WarOutcomeNotInvolved:
+			return pubsub.NackRequeue
+		case gamelogic.WarOutcomeNoUnits:
+			return pubsub.NackDiscard
+		case gamelogic.WarOutcomeOpponentWon:
+			return pubsub.Ack
+		case gamelogic.WarOutcomeYouWon:
+			return pubsub.Ack
+		case gamelogic.WarOutcomeDraw:
+			return pubsub.Ack
+		}
+
+		fmt.Println("error: unknown war outcome")
 		return pubsub.NackDiscard
 	}
 }
