@@ -1,0 +1,22 @@
+If you ever kill the Docker container running Rabbit,
+You'll need to manually recreate any declared exchanges.
+Rabbit normally persists them to disk. 
+But that doesn't help if you're creating new containers each time.
+
+------------
+
+For simplicity of our game, we'll make our transient and durable queues always have the same properties:
+
+    "Durable" queues in our system will always be non-exclusive and non-auto-delete.
+    "Transient" queues will always be exclusive and auto-delete.
+
+------------
+
+CREATED EXCHANGES
+peril_direct (direct)
+peril_topic (topic)
+peril_dlx (fanout)
+
+CREATED QUEUES
+pause_test [binding: from peril_direct with routing key "pause"]
+peril_dlq [binding: from perild_dlx no routing key]
