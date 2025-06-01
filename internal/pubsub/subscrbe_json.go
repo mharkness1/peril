@@ -20,6 +20,12 @@ func SubscribeJSON[T any](
 	if err != nil {
 		return fmt.Errorf("error checking and binding queue: %v", err)
 	}
+
+	err = ch.Qos(10, 0, false)
+	if err != nil {
+		return fmt.Errorf("could not set QoS: %v", err)
+	}
+
 	deliveries, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
 	if err != nil {
 		return fmt.Errorf("error consuming and delivering: %v", err)

@@ -100,9 +100,13 @@ func main() {
 				fmt.Printf("error, argument needs to be an int")
 				continue
 			}
-			for i := 0; i <= num; i++ {
+			for i := 0; i < num; i++ {
 				message := gamelogic.GetMaliciousLog()
-				pubsub.PublishJSON(publishCh, routing.ExchangePerilTopic, "game_logs."+username, message)
+				err = publishGameLog(publishCh, username, message)
+				if err != nil {
+					fmt.Printf("error publishing game log: %v", err)
+					continue
+				}
 			}
 
 		case "quit":
